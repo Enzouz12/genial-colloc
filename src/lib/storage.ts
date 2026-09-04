@@ -1,11 +1,13 @@
 import type { Offer, OfferStatus, OfferDetails } from "../types";
 import { supabase, hasSupabaseConfig } from "./supabase";
+import { hasApi, apiFetch, apiUrl } from "./api";
 
 /**
  * Couche d'accès aux données.
  *
- * Deux implémentations derrière la même interface :
- * - `supabaseStore` (collaboration temps réel) si les clés sont configurées,
+ * Trois implémentations derrière la même interface, choisies dans cet ordre :
+ * - `apiStore` (backend maison Node + Postgres) si VITE_API_URL est défini,
+ * - `supabaseStore` (collaboration temps réel) si les clés Supabase sont là,
  * - `localStore` (localStorage, zéro config) sinon.
  *
  * Les composants ne connaissent que `store` et ignorent l'implémentation.
@@ -182,5 +184,46 @@ export const supabaseStore: OfferStore = {
   },
 };
 
-/** Store actif : Supabase si configuré, sinon localStorage. */
-export const store: OfferStore = hasSupabaseConfig ? supabaseStore : localStore;
+// ---------- Backend maison (Node + Postgres) ----------
+
+/**
+ * Store branché sur l'API auto-hébergée. Contrairement à Supabase, l'API
+ * échange directement des objets `Offer` (le serveur les stocke en JSONB),
+ * donc aucun mapping de colonnes n'est nécessaire.
+ */
+export const apiStore: OfferStore = {
+  async getAll() {
+    return apiFetch<Offer[]>("/offers");
+  },
+  async add(offer) {
+    await apiFetch<void>("/offers", {
+      method: "POST",
+      body: JSON.stringify(offer),
+    });
+  },
+  async update(offer) {
+    await apiFetch<void>(`/offers/${encodeURIComponent(offer.id)}`, {
+      method: "PUT",
+      body: JSON.stringify(offer),
+    });
+  },
+  async remove(id) {
+    await apiFetch<void>(`/offers/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  },
+  subscribe(onChange) {
+    // Temps réel via Server-Sent Events : le serveur pousse un message à
+    // chaque écriture. EventSource se reconnecte tout seul en cas de coupure.
+    const source = new EventSource(apiUrl("/events"));
+    source.onmessage = () => onChange();
+    return () => source.close();
+  },
+};
+
+/** Store actif : API maison, sinon Supabase, sinon localStorage. */
+export const store: OfferStore = hasApi
+  ? apiStore
+  : hasSupabaseConfig
+    ? supabaseStore
+    : localStore;

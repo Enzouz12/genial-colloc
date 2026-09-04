@@ -56,32 +56,40 @@ Les variables sont lues **au build** (`npm run build` ou `docker compose build`)
 
 Pour récupérer des coordonnées : sur Google Maps, clic droit sur le lieu puis cliquer sur les coordonnées pour les copier. Le géocodage des adresses reste biaisé sur l'agglomération lyonnaise ; le lieu de référence est donc attendu dans la région de Lyon.
 
-### Stockage partagé (optionnel)
+### Stockage — trois modes
 
-Sans clés Supabase, l'application stocke les offres dans le navigateur local. Pour un stockage partagé en temps réel entre plusieurs personnes :
+L'application choisit son backend de stockage automatiquement, dans cet ordre :
 
-1. Créer un projet sur https://supabase.com
-2. Exécuter [supabase/schema.sql](supabase/schema.sql) dans le SQL Editor
-3. Copier les clés depuis Project Settings > API et renseigner `VITE_SUPABASE_URL` (sans le suffixe `/rest/v1/`) et `VITE_SUPABASE_ANON_KEY` dans `.env`
+| Priorité | Mode | Déclencheur | Partagé | Temps réel | Médias |
+| --- | --- | --- | --- | --- | --- |
+| 1 | **Backend maison** (Node + Postgres) | `VITE_API_URL` défini | oui | oui (SSE) | oui (disque VPS) |
+| 2 | **Supabase** | clés `VITE_SUPABASE_*` définies | oui | oui | oui (bucket privé) |
+| 3 | **localStorage** | aucune config | non | non | non |
 
-La clé anon est publique par conception et protégée côté base par les règles RLS.
+**Backend maison** — 100 % auto-hébergé, sans dépendance externe. Fourni clé en main par le `docker compose` ci-dessous (Postgres + API + médias sur disque). C'est le mode recommandé pour un VPS ; voir [server/README.md](server/README.md).
+
+**Supabase** — pratique pour un déploiement statique (Vercel, Netlify). Ne pas définir `VITE_API_URL`. Créer un projet sur https://supabase.com, exécuter [supabase/schema.sql](supabase/schema.sql) dans le SQL Editor, puis renseigner `VITE_SUPABASE_URL` (sans le suffixe `/rest/v1/`) et `VITE_SUPABASE_ANON_KEY`. La clé anon est publique par conception, protégée côté base par les règles RLS.
 
 ## Déploiement sur un VPS (Docker)
 
-Le dépôt fournit un [Dockerfile](Dockerfile) (build Vite servi par nginx, avec fallback SPA) et un [docker-compose.yml](docker-compose.yml).
+Le `docker compose` fourni monte une stack auto-contenue en trois conteneurs :
+
+- **db** — PostgreSQL (offres, volume persistant `db-data`)
+- **api** — backend Node : API REST + temps réel (SSE) + médias sur disque (volume `media-data`), voir [server/](server/)
+- **web** — front Vite servi par [nginx](nginx.conf), qui proxifie `/api` vers `api`
 
 ```
-cp .env.example .env      # renseigner colocataires, lieu de référence, Supabase, PORT
+cp .env.example .env      # colocataires, lieu de référence, identifiants Postgres, PORT
 docker compose up -d --build
 ```
 
-L'application écoute alors sur `http://<vps>:8080` (port configurable via `PORT` dans `.env`). Il est recommandé de la placer derrière un reverse proxy HTTPS (nginx, Caddy, Traefik).
+L'application écoute sur `http://<vps>:8080` (port configurable via `PORT`). À placer derrière un reverse proxy HTTPS (nginx, Caddy, Traefik). Les offres et les médias survivent aux redémarrages (volumes Docker) ; une sauvegarde consiste à sauvegarder ces deux volumes.
 
-Après toute modification du `.env`, relancer avec `docker compose up -d --build` pour reconstruire avec les nouvelles valeurs.
+Après toute modification des variables `VITE_` dans `.env`, relancer avec `docker compose up -d --build` (elles sont figées au build du front).
 
 ## Architecture
 
-La persistance passe par l'interface `OfferStore` définie dans `src/lib/storage.ts`. Le store actif est Supabase si les clés sont présentes, sinon localStorage. Les composants ignorent l'implémentation.
+La persistance passe par l'interface `OfferStore` définie dans `src/lib/storage.ts`, avec trois implémentations (API maison, Supabase, localStorage) choisies selon la configuration. Les composants ignorent l'implémentation. Le backend maison vit dans `server/` (Express + `pg`), indépendant du front.
 
 ```
 src/
@@ -92,15 +100,21 @@ src/
     routing.ts         temps de trajet TCL et vélo via Transitous
     color.ts           échelles loyer, temps et prix au m² vers couleur
     parseSeLoger.ts    extraction depuis un lien ou un texte collé
+    api.ts             client du backend maison (API REST)
     supabase.ts        client Supabase optionnel
-    storage.ts         couche de persistance, Supabase ou localStorage
+    storage.ts         persistance : API maison, Supabase ou localStorage
+    media.ts           upload/lecture des médias (API maison ou Supabase)
   components/
     MapView.tsx        carte, vues, sélection, pointage
     AddOfferForm.tsx   ajout et édition d'une offre
     OfferList.tsx      liste latérale
     Legend.tsx         légende dynamique
+server/                backend maison auto-hébergé (Node + Postgres)
+  src/index.js         API REST, temps réel SSE, médias sur disque
+  src/db.js            pool PostgreSQL + schéma
+  Dockerfile           image du backend
 supabase/
-  schema.sql           table offers, RLS, temps réel
+  schema.sql           table offers, RLS, temps réel (mode Supabase)
 extension/
   manifest.json        WebExtension Manifest V3
   content.js           extraction SeLoger et ouverture de l'app

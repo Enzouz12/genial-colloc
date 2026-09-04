@@ -1,0 +1,19 @@
+{
+  "name": "genial-coloc-server",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Backend maison de Génial Coloc : API REST + temps réel (SSE) + médias sur disque, sur PostgreSQL.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "multer": "^2.0.1",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "pg-mem": "^3.0.14"
+  }
+}

@@ -1,22 +1,62 @@
-# Déploiement de Génial Coloc sur un VPS.
-#   1. cp .env.example .env  puis renseigner .env
+# Déploiement auto-hébergé de Génial Coloc sur un VPS.
+#
+#   1. cp .env.example .env   puis renseigner .env
 #   2. docker compose up -d --build
 #   3. l'app écoute sur http://<vps>:${PORT:-8080}  (à mettre derrière un
 #      reverse proxy HTTPS type nginx/Caddy/Traefik).
 #
-# Les variables VITE_ étant figées au build, relancer avec --build après toute
-# modification du .env.
+# Stack 100 % auto-contenue, sans Supabase :
+#   - db  : PostgreSQL (données des offres, volume persistant)
+#   - api : backend Node (API REST + temps réel SSE + médias sur disque)
+#   - web : front statique (Vite) servi par nginx, qui proxy /api vers `api`
+#
+# Le front tape sur /api (même origine), donc VITE_API_URL=/api. Les variables
+# VITE_ étant figées au build, relancer avec --build après modification du .env.
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-coloc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-coloc}
+      POSTGRES_DB: ${POSTGRES_DB:-coloc}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-coloc}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: ./server
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-coloc}:${POSTGRES_PASSWORD:-coloc}@db:5432/${POSTGRES_DB:-coloc}
+      MEDIA_DIR: /data/media
+      MEDIA_SECRET: ${MEDIA_SECRET:-}
+      PORT: 3000
+    volumes:
+      - media-data:/data/media
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   web:
     build:
       context: .
       args:
-        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
-        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+        VITE_API_URL: ${VITE_API_URL:-/api}
         VITE_ROOMMATES: ${VITE_ROOMMATES:-}
         VITE_REFERENCE_NAME: ${VITE_REFERENCE_NAME:-}
         VITE_REFERENCE_LAT: ${VITE_REFERENCE_LAT:-}
         VITE_REFERENCE_LNG: ${VITE_REFERENCE_LNG:-}
     ports:
       - "${PORT:-8080}:80"
+    depends_on:
+      - api
     restart: unless-stopped
+
+volumes:
+  db-data:
+  media-data:
