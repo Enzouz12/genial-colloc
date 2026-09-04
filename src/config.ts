@@ -1,11 +1,38 @@
 // Constantes métier de Génial Coloc.
 import type { Offer, OfferStatus, OfferReview } from "./types";
 
-/** Point de référence : Université Lyon 2 — Campus Porte des Alpes (Bron). */
+/**
+ * Lit une variable d'environnement Vite (préfixe VITE_), avec repli si elle
+ * est absente ou vide. Permet de configurer l'app au déploiement sans toucher
+ * au code (voir .env.example). Les valeurs sont figées au build.
+ */
+function envStr(v: string | undefined, fallback: string): string {
+  return v != null && v.trim() !== "" ? v.trim() : fallback;
+}
+
+function envNum(v: string | undefined, fallback: number): number {
+  const n = v != null && v.trim() !== "" ? Number(v) : NaN;
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function envList(v: string | undefined, fallback: string[]): string[] {
+  if (v == null) return fallback;
+  const items = v
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return items.length ? items : fallback;
+}
+
+/**
+ * Point de référence de l'outil : le lieu vers lequel les temps de trajet sont
+ * calculés (par défaut Université Lyon 2 — Campus Porte des Alpes, Bron).
+ * Configurable au déploiement via VITE_REFERENCE_NAME / _LAT / _LNG.
+ */
 export const CAMPUS = {
-  name: "Lyon 2 — Campus Porte des Alpes",
-  lat: 45.722593,
-  lng: 4.915127,
+  name: envStr(import.meta.env.VITE_REFERENCE_NAME, "Lyon 2 — Campus Porte des Alpes"),
+  lat: envNum(import.meta.env.VITE_REFERENCE_LAT, 45.722593),
+  lng: envNum(import.meta.env.VITE_REFERENCE_LNG, 4.915127),
 } as const;
 
 /** Centre de carte par défaut (Lyon). */
@@ -47,8 +74,15 @@ export const COMMUTE = {
   bikeThresholds: [15, 25, 35, 45],
 } as const;
 
-/** Noms des colocataires (pour le champ "ajouté par"). */
-export const ROOMMATES = ["Enzo", "Esteban"] as const;
+/**
+ * Noms des colocataires (pour le champ "ajouté par" et le handshake d'intérêt).
+ * Configurable au déploiement via VITE_ROOMMATES (liste séparée par des virgules,
+ * ex. "Angelo,Nathalie"). Deux noms attendus, mais la liste peut en contenir plus.
+ */
+export const ROOMMATES: readonly string[] = envList(
+  import.meta.env.VITE_ROOMMATES,
+  ["Enzo", "Esteban"],
+);
 
 /** Statuts de suivi d'une offre, avec libellé et couleur. */
 export const STATUSES: { id: OfferStatus; label: string; color: string }[] = [

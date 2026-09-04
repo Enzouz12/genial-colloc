@@ -1,0 +1,22 @@
+# Déploiement de Génial Coloc sur un VPS.
+#   1. cp .env.example .env  puis renseigner .env
+#   2. docker compose up -d --build
+#   3. l'app écoute sur http://<vps>:${PORT:-8080}  (à mettre derrière un
+#      reverse proxy HTTPS type nginx/Caddy/Traefik).
+#
+# Les variables VITE_ étant figées au build, relancer avec --build après toute
+# modification du .env.
+services:
+  web:
+    build:
+      context: .
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+        VITE_ROOMMATES: ${VITE_ROOMMATES:-}
+        VITE_REFERENCE_NAME: ${VITE_REFERENCE_NAME:-}
+        VITE_REFERENCE_LAT: ${VITE_REFERENCE_LAT:-}
+        VITE_REFERENCE_LNG: ${VITE_REFERENCE_LNG:-}
+    ports:
+      - "${PORT:-8080}:80"
+    restart: unless-stopped

@@ -1,0 +1,13 @@
+# Ne pas copier ces éléments dans le contexte de build Docker.
+node_modules
+dist
+dist-ssr
+web-ext-artifacts
+.git
+.env
+.env.*
+!.env.example
+dossier-location
+.claude
+CLAUDE.md
+*.log

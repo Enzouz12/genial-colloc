@@ -38,17 +38,46 @@ Les itinéraires (Transitous) et le géocodage (BAN) sont des API publiques grat
 
 ## Configuration
 
-Sans configuration, l'application stocke les offres dans le navigateur local. Pour un stockage partagé en temps réel entre plusieurs personnes :
-
-1. Créer un projet sur https://supabase.com
-2. Exécuter [supabase/schema.sql](supabase/schema.sql) dans le SQL Editor
-3. Copier les clés depuis Project Settings > API
+Toute la configuration passe par un fichier `.env` (copié depuis [.env.example](.env.example)) :
 
 ```
 cp .env.example .env
 ```
 
-Renseigner `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY` dans `.env`. La clé anon est publique par conception et protégée côté base par les règles RLS.
+Les variables sont lues **au build** (`npm run build` ou `docker compose build`) : après toute modification du `.env`, il faut rebuild pour qu'elles soient prises en compte.
+
+### Personnalisation
+
+| Variable | Rôle | Défaut |
+| --- | --- | --- |
+| `VITE_ROOMMATES` | Noms des colocataires, séparés par une virgule (le premier est sélectionné par défaut). Ex. `Angelo,Nathalie` | `Enzo,Esteban` |
+| `VITE_REFERENCE_NAME` | Nom du lieu de référence affiché sur la carte | `Lyon 2 — Campus Porte des Alpes` |
+| `VITE_REFERENCE_LAT` / `VITE_REFERENCE_LNG` | Coordonnées du lieu vers lequel les temps de trajet (TCL, vélo) sont calculés | campus Porte des Alpes |
+
+Pour récupérer des coordonnées : sur Google Maps, clic droit sur le lieu puis cliquer sur les coordonnées pour les copier. Le géocodage des adresses reste biaisé sur l'agglomération lyonnaise ; le lieu de référence est donc attendu dans la région de Lyon.
+
+### Stockage partagé (optionnel)
+
+Sans clés Supabase, l'application stocke les offres dans le navigateur local. Pour un stockage partagé en temps réel entre plusieurs personnes :
+
+1. Créer un projet sur https://supabase.com
+2. Exécuter [supabase/schema.sql](supabase/schema.sql) dans le SQL Editor
+3. Copier les clés depuis Project Settings > API et renseigner `VITE_SUPABASE_URL` (sans le suffixe `/rest/v1/`) et `VITE_SUPABASE_ANON_KEY` dans `.env`
+
+La clé anon est publique par conception et protégée côté base par les règles RLS.
+
+## Déploiement sur un VPS (Docker)
+
+Le dépôt fournit un [Dockerfile](Dockerfile) (build Vite servi par nginx, avec fallback SPA) et un [docker-compose.yml](docker-compose.yml).
+
+```
+cp .env.example .env      # renseigner colocataires, lieu de référence, Supabase, PORT
+docker compose up -d --build
+```
+
+L'application écoute alors sur `http://<vps>:8080` (port configurable via `PORT` dans `.env`). Il est recommandé de la placer derrière un reverse proxy HTTPS (nginx, Caddy, Traefik).
+
+Après toute modification du `.env`, relancer avec `docker compose up -d --build` pour reconstruire avec les nouvelles valeurs.
 
 ## Architecture
 
